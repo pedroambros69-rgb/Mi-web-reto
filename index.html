@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diseña tu ruta sostenible</title>
+    <title>Diseña tu ruta sostenible - Comparador</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -60,8 +60,15 @@
             background: #e8f5e9;
             border-left: 5px solid #2e7d32;
             border-radius: 8px;
-            font-size: 1.1em;
-            line-height: 1.8;
+            font-size: 1.05em;
+            line-height: 1.7;
+        }
+        .bloque-impacto {
+            background: rgba(255, 255, 255, 0.6);
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 8px;
+            font-size: 0.95em;
         }
         .resultado strong {
             color: #1b5e20;
@@ -75,21 +82,23 @@
             margin-top: 15px;
             text-align: center;
         }
+        .mejora { color: #2e7d32; font-weight: bold; }
+        .peora { color: #c62828; font-weight: bold; }
     </style>
 </head>
 <body>
     <h1>🚲 Diseña tu ruta sostenible</h1>
     <div class="card">
-        <label for="perfil">Perfil del jugador</label>
+        <label for="perfil">Perfil del jugador (Situación inicial)</label>
         <select id="perfil">
-            <option value="Alumno, 2 km, sin bici propia">Alumno, 2 km, sin bici propia</option>
-            <option value="Alumno, 5 km, con bici">Alumno, 5 km, con bici</option>
-            <option value="Profesor, 8 km, coche disponible">Profesor, 8 km, coche disponible</option>
-            <option value="Alumno, 8 km, sin coche ni bici">Alumno, 8 km, sin coche ni bici</option>
-            <option value="Personal, 3 km, transporte público">Personal, 3 km, transporte público</option>
+            <option value="Alumno, 2 km, sin bici propia">Alumno (2 km · Suele ir andando)</option>
+            <option value="Alumno, 5 km, con bici">Alumno (5 km · Suele ir en Bici)</option>
+            <option value="Profesor, 8 km, coche disponible">Profesor (8 km · Suele ir en Coche solo)</option>
+            <option value="Alumno, 8 km, sin coche ni bici">Alumno (8 km · Suele ir en Autobús)</option>
+            <option value="Personal, 3 km, transporte público">Personal (3 km · Suele ir en Autobús)</option>
         </select>
 
-        <label for="medio">Medio elegido</label>
+        <label for="medio">Nueva alternativa propuesta</label>
         <select id="medio">
             <option value="Coche solo">Coche solo</option>
             <option value="Coche compartido (3)">Coche compartido (3)</option>
@@ -99,17 +108,17 @@
             <option value="Andando">Andando</option>
         </select>
 
-        <label for="km">Distancia (ida, en km)</label>
+        <label for="km">Distancia considerada (ida, en km)</label>
         <input type="number" id="km" value="2" min="0.1" step="0.1">
 
-        <button onclick="calcular()">Calcular impacto</button>
+        <button onclick="calcular()">Comparar impacto alternativo</button>
 
         <div id="resultado" class="resultado oculto"></div>
         <p class="aviso">Esta calculadora funciona sin conexión a internet. No se guardan datos.</p>
     </div>
 
     <script>
-        // Tabla de factores
+        // Tabla de factores por kilómetro
         const factores = {
             "Coche solo":            { co2: 120, euros: 0.20, kcal: 0 },
             "Coche compartido (3)":  { co2: 40,  euros: 0.07, kcal: 0 },
@@ -119,35 +128,89 @@
             "Andando":               { co2: 0,   euros: 0,    kcal: 50 }
         };
 
+        // Definición de la situación predefinida de cada perfil
+        const perfilesConfig = {
+            "Alumno, 2 km, sin bici propia":      { km: 2, medioBase: "Andando" },
+            "Alumno, 5 km, con bici":             { km: 5, medioBase: "Bici" },
+            "Profesor, 8 km, coche disponible":   { km: 8, medioBase: "Coche solo" },
+            "Alumno, 8 km, sin coche ni bici":    { km: 8, medioBase: "Autobús" },
+            "Personal, 3 km, transporte público": { km: 3, medioBase: "Autobús" }
+        };
+
+        // Cambiar automáticamente los kilómetros al seleccionar el perfil
+        document.getElementById("perfil").addEventListener("change", function() {
+            const perfilSeleccionado = this.value;
+            if (perfilesConfig[perfilSeleccionado]) {
+                document.getElementById("km").value = perfilesConfig[perfilSeleccionado].km;
+                calcular();
+            }
+        });
+
         function calcular() {
-            const medio = document.getElementById("medio").value;
-            const kmIda = parseFloat(document.getElementById("km").value);
-            const kmTotal = kmIda * 2; // ida y vuelta
+            const perfilKey = document.getElementById("perfil").value;
+            const medioAlternativo = document.getElementById("medio").value;
+            const kmIda = parseFloat(document.getElementById("km").value) || 0;
+            const kmTotal = kmIda * 2; // Ida y vuelta
 
-            const f = factores[medio];
+            const perfil = perfilesConfig[perfilKey];
+            const medioBase = perfil.medioBase;
 
-            const co2 = kmTotal * f.co2;
-            const euros = kmTotal * f.euros;
-            const kcal = kmTotal * f.kcal;
+            const fBase = factores[medioBase];
+            const fAlt = factores[medioAlternativo];
 
-            // Ahorro vs coche solo
-            const co2Ahorrado = (kmTotal * 120) - co2;
-            const eurosAhorrado = (kmTotal * 0.20) - euros;
+            // 1. Impacto de la situación actual del perfil
+            const co2Base = kmTotal * fBase.co2;
+            const eurosBase = kmTotal * fBase.euros;
+            const kcalBase = kmTotal * fBase.kcal;
+
+            // 2. Impacto de la nueva alternativa elegida con los MISMOS kilómetros
+            const co2Alt = kmTotal * fAlt.co2;
+            const eurosAlt = kmTotal * fAlt.euros;
+            const kcalAlt = kmTotal * fAlt.kcal;
+
+            // 3. Cálculo exacto de las diferencias (Balance del cambio)
+            const diffCo2 = co2Base - co2Alt; // Positivo significa ahorro
+            const diffEuros = eurosBase - eurosAlt;
+            const diffKcal = kcalAlt - kcalBase; // Positivo significa más ejercicio
 
             const resultado = document.getElementById("resultado");
             resultado.classList.remove("oculto");
+
+            // Crear los textos de balance dinámicos
+            const txtCo2 = diffCo2 >= 0 
+                ? `<span class="mejora">Evitas emitir ${diffCo2.toFixed(0)} g de CO₂</span>` 
+                : `<span class="peora">Emite ${Math.abs(diffCo2).toFixed(0)} g MÁS de CO₂</span>`;
+
+            const txtEuros = diffEuros >= 0 
+                ? `<span class="mejora">Ahorras ${diffEuros.toFixed(2)} €</span>` 
+                : `<span class="peora">Gastas ${Math.abs(diffEuros).toFixed(2)} € MÁS</span>`;
+
+            const txtKcal = diffKcal >= 0 
+                ? `<span class="mejora">Quemas ${diffKcal.toFixed(0)} kcal más</span>` 
+                : `<span class="peora">Quemas ${Math.abs(diffKcal).toFixed(0)} kcal menos</span>`;
+
             resultado.innerHTML = `
-                <strong>${medio}</strong> · ${kmTotal.toFixed(1)} km (ida y vuelta)<br>
-                🌍 CO₂: <strong>${co2.toFixed(0)} g</strong><br>
-                💰 €: <strong>${euros.toFixed(2)} €</strong><br>
-                ❤️ kcal: <strong>${kcal.toFixed(0)} kcal</strong><br>
+                <strong>Comparativa para ${kmTotal.toFixed(1)} km totales:</strong>
+                
+                <div class="bloque-impacto" style="border-left: 3px solid #666;">
+                    <strong>Situación Perfil (${medioBase}):</strong><br>
+                    🌍 CO₂: ${co2Base.toFixed(0)} g | 💰 Coste: ${eurosBase.toFixed(2)} € | ❤️ Ejercicio: ${kcalBase.toFixed(0)} kcal
+                </div>
+
+                <div class="bloque-impacto" style="border-left: 3px solid #2e7d32;">
+                    <strong>Nueva Alternativa (${medioAlternativo}):</strong><br>
+                    🌍 CO₂: ${co2Alt.toFixed(0)} g | 💰 Coste: ${eurosAlt.toFixed(2)} € | ❤️ Ejercicio: ${kcalAlt.toFixed(0)} kcal
+                </div>
+
                 <hr style="margin:12px 0; border:none; border-top:1px solid #a5d6a7;">
-                ✅ Ahorro vs coche solo:<br>
-                CO₂: <strong>${co2Ahorrado.toFixed(0)} g</strong> · €: <strong>${eurosAhorrado.toFixed(2)} €</strong>
+                <strong>📊 Balance al cambiar de transporte:</strong><br>
+                🌱 Clima: ${txtCo2}<br>
+                💳 Bolsillo: ${txtEuros}<br>
+                💪 Salud: ${txtKcal}
             `;
         }
 
-        // Calcular al cargar (opcional)
+        // Lanzar el cálculo inicial al cargar la página
         window.onload = calcular;
     </script>
 </body>
